@@ -2,12 +2,11 @@ from flask import Flask, render_template, request, jsonify
 import json
 import string
 import random
+import pickle
 import nltk
 import numpy as np
 from nltk.stem import WordNetLemmatizer
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.models import load_model
 
 # Download required NLTK data
 try:
@@ -97,63 +96,30 @@ data = {"intents": [
   }
 ]}
 
-# Initialize your NLP components (from your original code)
+# Initialize lemmatizer
 lemmatizer = WordNetLemmatizer()
 
-words = []
-classes = []
-doc_x = []
-doc_y = []
+# Load the pre-trained model and preprocessed data
+print("Loading model and data...")
+try:
+    model = load_model("chatbot_model.h5")
+    print("Model loaded successfully!")
+except Exception as e:
+    print(f"Error loading model: {e}")
+    model = None
 
-for intent in data["intents"]:
-    for pattern in intent["patterns"]:
-        tokens = nltk.word_tokenize(pattern)
-        words.extend(tokens)
-        doc_x.append(pattern)
-        doc_y.append(intent["tag"])
-    if intent["tag"] not in classes:
-        classes.append(intent["tag"])
+try:
+    with open("words.pkl", "rb") as f:
+        words = pickle.load(f)
+    with open("classes.pkl", "rb") as f:
+        classes = pickle.load(f)
+    print("Words and classes loaded successfully!")
+except Exception as e:
+    print(f"Error loading words/classes: {e}")
+    words = []
+    classes = []
 
-words = [lemmatizer.lemmatize(word.lower()) for word in words if word not in string.punctuation]
-words = sorted(set(words))
-classes = sorted(set(classes))
-
-training = []
-out_empty = [0] * len(classes)
-
-for idx, doc in enumerate(doc_x):
-    bow = []
-    text = lemmatizer.lemmatize(doc.lower())
-    for word in words:
-        bow.append(1) if word in text else bow.append(0)
-    output_row = list(out_empty)
-    output_row[classes.index(doc_y[idx])] = 1
-    training.append([bow, output_row])
-
-random.shuffle(training)
-training = np.array(training, dtype=object)
-
-train_X = np.array(list(training[:, 0]))
-train_y = np.array(list(training[:, 1]))
-input_shape = (len(train_X[0]),)
-output_shape = len(train_y[0])
-
-# Build and train model
-model = Sequential()
-model.add(Dense(128, input_shape=input_shape, activation='relu'))
-model.add(Dropout(0.5))
-model.add(Dense(64, activation='relu'))
-model.add(Dropout(0.3))
-model.add(Dense(output_shape, activation='softmax'))
-
-adam = tf.keras.optimizers.Adam(learning_rate=0.01)
-model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['accuracy'])
-
-print("Training the model...")
-model.fit(x=train_X, y=train_y, epochs=200, verbose=0)
-print("Model trained successfully!")
-
-# Your prediction functions (unchanged)
+# Prediction functions
 def clean_text(text):
     tokens = nltk.word_tokenize(text)
     tokens = [lemmatizer.lemmatize(word) for word in tokens]
